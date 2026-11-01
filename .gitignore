@@ -1,0 +1,22 @@
+﻿.venv/
+__pycache__/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.py[cod]
+
+# Research datasets and generated outputs
+data/raw/
+data/processed/
+data/annotations/*.jsonl
+*.zip
+
+# Secrets
+*credentials*
+*secret*
+
+# IDE
+.vscode/
+.idea/

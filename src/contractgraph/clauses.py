@@ -1,29 +1,50 @@
+"""Clause segmentation and deterministic attribute enrichment."""
+from __future__ import annotations
+
 import re
-PATTERNS = {
- "payment": r"\b(payment|invoice|fee|payable|compensation)\b",
- "termination": r"\b(termination|terminate|notice period|expiry)\b",
- "liability": r"\b(liability|liable|damages|indemnif|limitation of)\b",
- "confidentiality": r"\b(confidential|non-disclosure|disclose|proprietary information)\b",
- "obligation": r"\b(shall|must|required to|undertakes)\b",
- "exception": r"\b(except|excluding|notwithstanding|provided that|unless)\b",
- "governing_law": r"\b(governing law|jurisdiction|venue)\b",
-}
+from .attribute_extraction import extract_clause_attributes
+
+HEADING = re.compile(
+    r"(?im)^\s*((?:\d+(?:\.\d+)*[.)]?\s+)|(?:section\s+\d+(?:\.\d+)*\s*[:.-]?\s*)|"
+    r"(?:article\s+[ivx\d]+\s*[:.-]?\s*)|(?:[A-Z][A-Z0-9 ,/&()-]{3,80}))"
+)
+
 def enrich_clauses(clauses):
-    out=[]
-    for c in clauses:
-        aspects=[k for k,p in PATTERNS.items() if re.search(p,c["text"],re.I)]
-        durations=[{"value":int(n),"unit":u.lower()} for n,u in re.findall(
-            r"\b(\d{1,4})\)?\s*(business days?|days?|weeks?|months?|years?)\b",c["text"],re.I)]
-        out.append({**c,"aspects":aspects,"durations":durations})
+    out = []
+    for clause in clauses:
+        attrs = extract_clause_attributes(clause.get("text", ""))
+        out.append({**clause, **attrs})
     return out
+
 def split_clauses(text):
-    paragraphs=[p.strip() for p in re.split(r"\n\s*\n+",text) if p.strip()]
-    clauses=[]
-    for p in paragraphs:
-        if len(p)<25 and clauses:
-            clauses[-1]["text"] += "\n"+p
+    if not isinstance(text, str) or not text.strip():
+        return []
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    chunks, current = [], []
+    for line in lines:
+        is_heading = bool(re.match(
+            r"^\s*(?:(?:\d+(?:\.\d+)*[.)]?)|(?:section\s+\d)|"
+            r"(?:article\s+[ivx\d]+))\s+", line, re.I
+        ))
+        if is_heading and current and any(x.strip() for x in current):
+            chunks.append("\n".join(current).strip())
+            current = [line]
         else:
-            i=len(clauses)+1
-            clauses.append({"id":f"C{i}","title":p.splitlines()[0][:100],"text":p})
-    if not clauses and text.strip(): clauses=[{"id":"C1","title":"Clause 1","text":text.strip()}]
+            current.append(line)
+    if current and any(x.strip() for x in current):
+        chunks.append("\n".join(current).strip())
+    if len(chunks) <= 1:
+        chunks = [p.strip() for p in re.split(r"\n\s*\n+", text) if p.strip()]
+    merged = []
+    for chunk in chunks:
+        if len(chunk) < 25 and merged:
+            merged[-1] += "\n" + chunk
+        else:
+            merged.append(chunk)
+    clauses = []
+    for i, chunk in enumerate(merged, 1):
+        first = next((x.strip() for x in chunk.splitlines() if x.strip()), f"Clause {i}")
+        clauses.append({
+            "id": f"C{i}", "title": first[:120], "text": chunk, "index": i
+        })
     return enrich_clauses(clauses)

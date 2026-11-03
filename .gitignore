@@ -20,3 +20,14 @@ data/annotations/*.jsonl
 # IDE
 .vscode/
 .idea/
+
+# Experiment outputs and model artifacts
+results/
+models/
+data/annotations/ai_review_drafts/
+
+# Local backups and temporary patches
+*.backup*
+*.before*
+*.m2-backup
+*.m7-backup
